@@ -111,8 +111,23 @@ var _WebSocket = org.java_websocket.client.WebSocketClient.extend({
 
             this.wrapper._notify("message", [this.wrapper, view.buffer]); }
     },
-    onPong: function(){
+    onPong: function(binaryMessage) {
+        if (this.wrapper) {
 
+            // Make sure binaryMessage is at beginning of buffer
+            //noinspection JSUnresolvedFunction
+            binaryMessage.rewind();
+
+            // Convert Binary Message into ArrayBuffer/Uint8Array
+            //noinspection JSUnresolvedFunction
+            var count = binaryMessage.limit();
+            var view = new Uint8Array(count);
+            for (var i=0;i<count;i++) {
+                view[i] = binaryMessage.get(i);
+            }
+            binaryMessage = null;
+
+            this.wrapper._notify("pong", [this.wrapper, view.buffer]); }
     },
     onError: function (err) {
         if (this.wrapper) {
@@ -468,23 +483,51 @@ NativeWebSockets.prototype._startQueueRunner = function() {
  */
 NativeWebSockets.prototype._send = function(message) {
   if (message instanceof ArrayBuffer || message instanceof Uint8Array || Array.isArray(message)) {
-      var view;
-      if (message instanceof ArrayBuffer) {
-         view = new Uint8Array(message);
-      } else {
-         view = message;
-      }
-      //noinspection JSUnresolvedFunction,JSUnresolvedVariable
-      var buffer = java.lang.reflect.Array.newInstance(java.lang.Byte.class.getField("TYPE").get(null), view.length);
-      for (var i=0;i<view.length;i++) {
-          //noinspection JSUnresolvedFunction,JSUnresolvedVariable
-          java.lang.reflect.Array.setByte(buffer, i, byte(view[i]));
-      }
+      var buffer = this._convertBuffer(message);
       this._socket.send(buffer);
   } else {
       this._socket.send(message);
   }
+};
 
+/**
+ * Internal function that prepares the message for java
+ * @param message {String|ArrayBuffer} - Message to send
+ * @private
+ */
+NativeWebSockets.prototype._convertBuffer = function(message) {
+    var view;
+    if (message instanceof ArrayBuffer) {
+        view = new Uint8Array(message);
+    } else {
+        view = message;
+    }
+    //noinspection JSUnresolvedFunction,JSUnresolvedVariable
+    var buffer = java.lang.reflect.Array.newInstance(java.lang.Byte.class.getField("TYPE").get(null), view.length);
+    for (var i=0;i<view.length;i++) {
+        //noinspection JSUnresolvedFunction,JSUnresolvedVariable
+        java.lang.reflect.Array.setByte(buffer, i, byte(view[i]));
+    }
+    return buffer;
+};
+/**
+ * This sends a PING request
+ * @param message {string|Array|ArrayBuffer} - Message to send, should be received in the pong handler. Ignored at the moment,
+ * waiting for support in the Java library
+ * @returns {boolean} - returns false if it is unable to send the request at this time
+ */
+NativeWebSockets.prototype.ping = function(message) {
+
+    var state = this.state();
+
+    if (state !== this.OPEN) {
+        return false;
+    }
+    var frame = new org.java_websocket.framing.FramedataImpl1(org.java_websocket.framing.Framedata.Opcode.PING);
+    frame.setFin(true);
+    this._socket.sendFrame(frame);
+
+    return true;
 };
 
 /**

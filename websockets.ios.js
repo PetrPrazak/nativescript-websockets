@@ -349,6 +349,31 @@ NativeWebSockets.prototype._send = function(message) {
 };
 
 /**
+ * This sends a PING request
+ * @param message {string|Array|ArrayBuffer} - Message to send, should be received in the pong handler
+ * @returns {boolean} - returns false if it is unable to send the request at this time
+ */
+NativeWebSockets.prototype.ping = function(message) {
+
+    var state = this.state();
+
+    if (message === null || message === undefined) {
+        message = new ArrayBuffer(0);
+    }
+
+    if (state !== this.OPEN) {
+        return false;
+    }
+
+    var self = this;
+    this._socket.pingHandler(message, function(payload) {
+        self._notify("pong", [self,payload]);
+    });
+    return true;
+
+};
+
+/**
  * Returns the state of the Connection
  * @returns {Number} - returns this.NOT_YET_CONNECTED, .CONNECTING, .OPEN, .CLOSING or .CLOSED
  */
